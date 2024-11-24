@@ -252,7 +252,7 @@ namespace program {
             vector<string> instructions;
             string errorMessage;
             bool error = false;
-            bool newLine = true;
+            bool persistNewLine = true;
         } instructionParams;
 
         string buildInstructions(InstructionParams params) {
@@ -264,12 +264,13 @@ namespace program {
 
             if (params.error) {
                 output +=(format::print("## " + params.errorMessage + " ##", {format::CENTER}) + "\n");
-            } else if (params.newLine) {
+            } else if (params.persistNewLine) {
                 output += "\n";
             }
 
             return output;
         }
+
 
         string buildOptions(vector<string> options, int offset = 0) {
             string output = "";
@@ -287,10 +288,95 @@ namespace program {
             }
             return output;
         }
+    }
 }
 
 namespace display {
     namespace screenTemplate {
 
+        using namespace program;
+        using namespace utils;
+
+        struct HandleInputParams {
+            vector<string> instructions;
+            vector<string> options;
+            vector<int> returnInvokers = {0};
+            string inputPrompt;
+            string errorMessageInvalidType = "Invalid input! Please enter an integer";
+            string errorMessageOutOfRange = "Invalid input! Please enter a valid option.";
+            string prevInput;
+            bool persistNewLine = false;
+            int optionsOffset = 0;
+            int maxInputValue;
+            int minInputValue;
+        };
+
+        struct HandleInput {
+            int value;
+            bool error;
+            string inputText;
+        };
+
+        HandleInput handleInput(HandleInputParams params) {
+            HandleInput result;
+            result.value = 0;
+            result.error = false;
+
+            string errorMesage;
+
+            do {
+                screen::clear();
+
+                cout << components::buildHUD() 
+                    << components::buildInstructions({
+                        params.instructions,
+                        errorMesage,
+                        result.error,
+                        params.persistNewLine
+                    });
+
+                if (params.options.size() > 0) {
+                    cout << components::buildOptions(params.options , params.optionsOffset);
+                }
+
+                cout << components::buildHeader('-');
+
+                if (!params.prevInput.empty()) {
+                    cout << params.prevInput;
+                }
+
+                result.error = input::getInput(params.inputPrompt, result.value);
+                if (!result.error) {
+                    for (auto &invokerValue : params.returnInvokers) {
+                        if (result.error = result.value == invokerValue) {
+                            break;
+                        }
+                    }
+                    if (result.error = (result.value < params.minInputValue || result.value > params.maxInputValue)) {
+                        errorMesage = params.errorMessageOutOfRange;
+                        continue;
+                    }
+                }
+                errorMesage = params.errorMessageInvalidType;
+            } while (result.error);
+
+            result.inputText =
+                params.prevInput.empty() 
+                    ? input::buildAsInput(params.inputPrompt, to_string(result.value)) 
+                    : params.prevInput + "\n" + input::buildAsInput(params.inputPrompt, to_string(result.value));
+
+            return result;
+        }
+    }
+
+    namespace screen {
+        void clear() {
+            #if defined(__LINUX__) || defined(__APPLE__) || defined(__gnu_linux__) || defined(__linux__)
+                cout << "\x1b[2J\x1b[H";
+            #else
+                cout << string(100, '\n');
+            #endif
+            return;
+        }
     }
 }
