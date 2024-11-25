@@ -108,8 +108,8 @@ namespace utils {
 
             switch (options.position) {
                 case LEFT: {
-                    spaceLengthLeft = (options.length - textLength) / 2;
-                    spaceLengthRight = options.length - spaceLengthLeft - textLength;
+                    spaceLengthLeft = 0;
+                    spaceLengthRight = options.length - textLength;
                     break;
                 }
                 case CENTER: {
@@ -136,22 +136,47 @@ namespace utils {
             cout << buildTextFormat(text, options);
             return "";
         }
-        vector<string> splitWords(const std::string& input, size_t limit) {
-            istringstream stream(input);
+        vector<string> splitWords(const string& input, size_t limit) {
             string word, result;
             size_t currentLength = 0;
             vector<string> results;
 
-            while (stream >> word) {
-                if (currentLength + word.length() + (currentLength > 0 ? 1 : 0) > limit) {
+            size_t start = 0;
+            // Collect leading spaces for the first line
+            while (start < input.length() && input[start] == ' ') {
+                result += input[start];
+                start++;
+            }
+
+            currentLength = result.length();
+
+            // Process the rest of the input word by word
+            for (size_t i = start; i < input.length(); ) {
+                // Skip extra spaces
+                while (i < input.length() && input[i] == ' ') i++;
+                size_t wordStart = i;
+                while (i < input.length() && input[i] != ' ') i++;
+                size_t wordLength = i - wordStart;
+
+                // Check if the current word fits in the line
+                if (currentLength + wordLength + (currentLength > 0 && result[currentLength - 1] != ' ' ? 1 : 0) > limit) {
                     results.push_back(result);
+                    result.clear();
                     currentLength = 0;
-                } else if (currentLength > 0) {
-                    result += ' '; 
+                }
+
+                // Append the word to the current line
+                if (!result.empty() && result[currentLength - 1] != ' ') {
+                    result += ' ';
                     currentLength++;
                 }
-                result += word;
-                currentLength += word.length();
+                result += input.substr(wordStart, wordLength);
+                currentLength += wordLength;
+            }
+
+            // Add the last line if not empty
+            if (!result.empty()) {
+                results.push_back(result);
             }
 
             return results;
@@ -191,7 +216,7 @@ namespace utils {
         bool getInput(const string prompt, string& var) {
             cout << " >> " << prompt;
             getline(cin, var);
-            return false;
+            return var.empty();
         }
 
         string buildAsInput(const string prompt, string value = "") {
@@ -308,9 +333,13 @@ namespace program {
             int num;
             int optionsSize = options.size();
 
-            for (int i = (offset == 0); i < optionsSize; i++) {
-                if (offset == 0 && i == optionsSize - 1) {
-                    num = 0;
+            for (int i = 0; i < optionsSize; i++) {
+                if (offset == 0) {
+                    if (i == optionsSize - 1) {
+                        num = 0;
+                    } else { 
+                        num = i + 1;
+                    };
                 } else {
                     num = offset + i;
                 };
@@ -346,6 +375,7 @@ namespace display {
             string prevInput;
             vector<int> returnInvokers;
             string inputPrompt = "Enter your choice: ";
+            string errorMessage;
             string errorMessageInvalidType = "Invalid input! Please enter an integer";
             string errorMessageOutOfRange = "Invalid input! Please enter a valid option.";
             bool persistNewLine = false;
@@ -353,100 +383,25 @@ namespace display {
         };
 
         struct HandleInput {
-            int value;
-            bool error;
+            int value = 0;
+            bool error = false;
             string inputText;
-        };
+        } defaultHandleInput;
 
-        HandleInput handleInput(HandleInputParams params) {
+        HandleInput handleInput(HandleInputParams params, HandleInput result = defaultHandleInput) {
             if ((params.options.size() != 0) && (params.maxInputValue == 0) && (params.minInputValue == 0)) {
                 params.maxInputValue = params.options.size() - 1 + params.optionsOffset;
                 params.minInputValue = params.optionsOffset;
             }
 
-            HandleInput result;
-            result.value = 0;
-            result.error = false;
-
-            string errorMesage;
-
-            do {
-                clear();
-
-                cout << components::buildHUD() 
-                    << components::buildInstructions({
-                        params.instructions,
-                        errorMesage,
-                        result.error,
-                        params.persistNewLine
-                    });
-
-                if (params.options.size() > 0) {
-                    cout << components::buildOptions(params.options , params.optionsOffset);
-                }
-
-                cout << components::buildHeader('-');
-
-                if (!params.prevInput.empty()) {
-                    cout << params.prevInput;
-                }
-
-                result.error = input::getInput(params.inputPrompt, result.value);
-                if (!result.error) {
-                    for (auto &invokerValue : params.returnInvokers) {
-                        if (result.error = (result.value == invokerValue)) {
-                            result.inputText =
-                                params.prevInput.empty() 
-                                    ? input::buildAsInput(params.inputPrompt, to_string(result.value)) 
-                                    : params.prevInput + "\n" + input::buildAsInput(params.inputPrompt, to_string(result.value));
-                            return result;
-                        }
-                    }
-                    if (result.error = (result.value < params.minInputValue || result.value > params.maxInputValue)) {
-                        errorMesage = params.errorMessageOutOfRange;
-                        continue;
-                    }
-                }
-                errorMesage = params.errorMessageInvalidType;
-            } while (result.error);
-
-            result.inputText =
-                params.prevInput.empty() 
-                    ? input::buildAsInput(params.inputPrompt, to_string(result.value)) 
-                    : params.prevInput + "\n" + input::buildAsInput(params.inputPrompt, to_string(result.value));
-
-            return result;
-        }
-
-        struct HandleStringInputParams {
-            vector<string> instructions;
-            vector<string> options;
-            string prevInput;
-            vector<string> returnInvokers;
-            string inputPrompt = "Enter your choice: ";
-            bool persistNewLine = false;
-            int optionsOffset = 0;
-        };
-
-        struct HandleStringInput {
-            string value;
-            string inputText;
-            int status;
-        };
-
-        HandleStringInput handleStringInput(HandleStringInputParams params) {
-            HandleStringInput result;
-            result.value = "";
-            result.inputText = "";
-            result.status = 0;
-            
+            // do {
             clear();
 
             cout << components::buildHUD() 
                 << components::buildInstructions({
                     params.instructions,
-                    "",
-                    false,
+                    params.errorMessage,
+                    result.error,
                     params.persistNewLine
                 });
 
@@ -460,13 +415,101 @@ namespace display {
                 cout << params.prevInput;
             }
 
-            input::getInput(params.inputPrompt, result.value);
+            bool fail = input::getInput(params.inputPrompt, result.value);
+
+            
+
+            if (fail) {
+                result.error = true;
+                params.errorMessage = params.errorMessageInvalidType;
+                return handleInput(params, result);
+            } else {
+                for (auto &invokerValue : params.returnInvokers) {
+                    if (result.error = result.value == invokerValue) {
+                        break;
+                    }
+                }
+                if (!result.error) {
+                    if (result.error = result.value < params.minInputValue || result.value > params.maxInputValue) {
+                        params.errorMessage = params.errorMessageOutOfRange;
+                        return handleInput(params, result);
+                    }
+                }
+            }
+            //     if (!result.error) {
+            //         for (auto &invokerValue : params.returnInvokers) {
+            //             if (result.error = (result.value == invokerValue)) {
+            //                 result.inputText =
+            //                     params.prevInput.empty() 
+            //                         ? input::buildAsInput(params.inputPrompt, to_string(result.value)) 
+            //                         : params.prevInput + "\n" + input::buildAsInput(params.inputPrompt, to_string(result.value));
+            //                 return result;
+            //             }
+            //         }
+            //         if (result.error = (result.value < params.minInputValue || result.value > params.maxInputValue)) {
+            //             errorMesage = params.errorMessageOutOfRange;
+            //             continue;
+            //         }
+            //     }
+            //     errorMesage = params.errorMessageInvalidType;
+            // } while (result.error);
+
+            result.inputText =
+                params.prevInput.empty() 
+                    ? input::buildAsInput(params.inputPrompt, to_string(result.value)) 
+                    : params.prevInput + "\n" + input::buildAsInput(params.inputPrompt, to_string(result.value));
+
+            return result;
+        }
+
+        struct HandleStringInputParams {
+            vector<string> instructions;
+            vector<string> options;
+            vector<string> returnInvokers;
+            string inputPrompt = "Enter your choice: ";
+            string errorMessage = "The value cannot be empty!";
+            string prevInput;
+            int optionsOffset = 0;
+        };
+
+        struct HandleStringInput {
+            string value = "";
+            bool error = false;
+            string inputText = "";
+        } defaultStringInput;
+
+        HandleStringInput handleStringInput(HandleStringInputParams params, HandleStringInput result = defaultStringInput) {
+            
+            clear();
+
+            cout << components::buildHUD() 
+                << components::buildInstructions({
+                    params.instructions,
+                    params.errorMessage,
+                    result.error,
+                    false
+                });
+
+            if (params.options.size() > 0) {
+                cout << components::buildOptions(params.options , params.optionsOffset);
+            }
+
+            cout << components::buildHeader('-');
+
+            if (!params.prevInput.empty()) {
+                cout << params.prevInput;
+            }
+
+            bool empty = input::getInput(params.inputPrompt, result.value);
 
             for (auto &invokerValue : params.returnInvokers) {
-                if (result.value == invokerValue) {
-                    result.status = -1;
+                if (result.error = result.value == invokerValue) {
                     break;
                 }
+            }
+
+            if (result.error = ((!result.error) && empty)) {
+                return handleStringInput(params, result);
             }
             
             result.inputText =
@@ -482,6 +525,7 @@ namespace display {
             vector<string> title;
             vector<string> paragraphs;
             string prompt;
+            vector<string> returnInvokers = {"0"};
         };
 
         int postScreen(PostScreenParams params) {
@@ -502,13 +546,19 @@ namespace display {
                 
                 vector<string> lines = utils::format::splitWords(paragraph, limit);
                 for (auto &line : lines) {
-                    cout << utils::format::buildTextFormat(line, {utils::format::LEFT, program::options::lengthHUD}) + "\n";
+                    cout << utils::format::buildTextFormat("    " + line, {utils::format::LEFT, program::options::lengthHUD-2}) + "\n";
                 }
             }
 
             cout << components::buildHeader('-');
 
             input::getInput(params.prompt, value);
+
+            for (auto &invokerValue : params.returnInvokers) {
+                if (value == invokerValue) {
+                    return -1;
+                }
+            }
 
             return 1;
         }
@@ -541,7 +591,7 @@ namespace display {
             sharedParams.instructions = params.instructions;
             sharedParams.returnInvokers = {0};
             sharedParams.errorMessageInvalidType = params.errorMessageInvalidType;
-            sharedParams.persistNewLine = false;
+            sharedParams.persistNewLine = true;
             sharedParams.optionsOffset = 0;
             sharedParams.minInputValue = 1;
 
@@ -619,7 +669,7 @@ namespace display {
         }
 
         int options() {
-            int returnValue;
+            int status;
 
             screenTemplate::HandleInputParams params;
             params.instructions = {"[Options]", "Choose an option."};
@@ -634,54 +684,130 @@ namespace display {
 
                 switch (result.value) {
                     case 1: {
-                        returnValue = 1;
+                        status = 1;
                         break;
                     }
                     case 2: {
-                        returnValue = optionsSetDimensions();
+                        status = optionsSetDimensions();
                         break;
                     }
                     case 0: {
-                        returnValue = 0;
+                        status = 0;
                         break;
                     }
                 }
-            } while (returnValue == -1);
+            } while (status == -1);
 
-            return returnValue;
+            return status;
         }
         
         int createReservation() {
-            int value;
+            int status = 0;
 
             screenTemplate::RowColumnParams params;
-            params.instructions = {"[Create Seat Reservation]", "Enter the row and column of the seat."};
+            params.instructions = {"[Create Seat Reservation]", "Enter the row and column of the seat. -> [0] Back"};
+                
+            screenTemplate::RowColumn result;
 
-            screenTemplate::RowColumn result = screenTemplate::getRowColumn(params);
-
-            if (result.error) {
-                return -1;
-            }
-            
             screenTemplate::PostScreenParams postParams;
-            postParams.title = {"[Create Seat Reservation]"};
+            postParams.title = {
+                params.instructions[0],
+                "",
+                " -> [0] Create Reservation",
+                " -> [Enter] Return to Main Menu",
+                ""
+            };
+            
 
-            int rowIndex = result.row - 1;
-            int columnIndex = result.column - 1;
+            screenTemplate::HandleStringInputParams sharedParams, nameParams, descriptionParams;
+            sharedParams.instructions = {
+                params.instructions[0],
+                "Enter the the reservation information for the seat."
+            };
+            sharedParams.returnInvokers = {"0"};
+            nameParams = descriptionParams = sharedParams;
+            
+            nameParams.inputPrompt = "Enter Name: ";
+            descriptionParams.inputPrompt = "Enter Description: ";
 
-            if (seatrs::isValidSeat(rowIndex, columnIndex)) {
-                if (seatrs::data::seats[rowIndex][columnIndex].isReserved) {
-                    postParams.paragraphs.push_back(" ## The seat [" + to_string(rowIndex + 1) + "][" + to_string(columnIndex + 1) + "] is already reserved! Please pick another seat.");
-                } else {
-                    screenTemplate::HandleStringInputParams nameParams, descriptionParams;
+            screenTemplate::HandleStringInput resultName, resultDescription;
+
+            do {
+                result = screenTemplate::getRowColumn(params);
+
+                if (result.error) {
+                    status = 1;
+                    return status;
                 }
-            }
 
-            return 0;
+                int rowIndex = result.row - 1;
+                int columnIndex = result.column - 1;
+
+                if (seatrs::isValidSeat(rowIndex, columnIndex)) {
+                    if (seatrs::data::seats[rowIndex][columnIndex].isReserved) {
+                        screenTemplate::PostScreenParams newPostParams = postParams;
+                        newPostParams.paragraphs = {" ## The seat [" + to_string(rowIndex + 1) + "][" + to_string(columnIndex + 1) + "] is already reserved! Please pick another seat."};
+                        status = screenTemplate::postScreen(newPostParams);
+                        continue;
+                    }
+                } else {
+                    screenTemplate::PostScreenParams newPostParams = postParams;
+                    newPostParams.paragraphs = {" ## The seat [" + to_string(rowIndex + 1) + "][" + to_string(columnIndex + 1) + "] is invalid! Please pick another seat within the range of the seat layout ."};
+                    status = screenTemplate::postScreen(postParams);
+                    continue;
+                }
+
+                bool error = false;
+
+                do {
+                    resultName = screenTemplate::handleStringInput(nameParams);
+                    
+                    if (error = resultName.error) {
+                        break;
+                    }
+
+                    descriptionParams.prevInput = resultName.inputText;
+
+                    resultDescription = screenTemplate::handleStringInput(descriptionParams);
+
+                    error = resultDescription.error;
+
+                } while (error);
+
+                if (error) {
+                    status = -1;
+                } else {
+                    status = 1;
+                    seatrs::Seat &seat = seatrs::data::seats[result.row - 1][result.column - 1];
+                    seat.name = resultName.value;
+                    seat.description = resultDescription.value;
+                    seat.isReserved = true;
+
+                    screenTemplate::PostScreenParams successPostParams = postParams;
+                    postParams.paragraphs.clear();
+                    successPostParams.title = {
+                        postParams.title[0], 
+                        "Reservation created successfully for " + resultName.value + " at seat [" + to_string(result.row) + "][" + to_string(result.column) + "].",
+                        "",
+                        " -> [0] Create Another Reservation",
+                        " -> [Enter] Return to Main Menu"
+                    };
+                    status = screenTemplate::postScreen(successPostParams);
+                }
+
+            } while (status == -1);
+
+            return status;
+        }
+
+        int readReservation() {
+            int status = 0;
+
+            return status;
         }
 
         void mainMenu() {
-            int returnValue;
+            int status = 1;
 
             screenTemplate::HandleInputParams params;
             params.instructions = {"[Main Menu]", "Choose an option."};
@@ -698,13 +824,17 @@ namespace display {
                 screenTemplate::HandleInput result = screenTemplate::handleInput(params);
 
                 switch (result.value) {
+                    case 2: {
+                        status = createReservation();
+                        break;
+                    }
                     case 0: {
-                        returnValue = options();
+                        status = options();
                         break;
                     }
                     
                 }
-            } while (returnValue != 0);
+            } while (status != 0);
         }
         
     }
