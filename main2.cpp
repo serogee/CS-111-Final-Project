@@ -158,16 +158,18 @@ namespace utils {
 
             string result;
 
-            vector<string> lines = (params.explicitTextLength > 0) ?
-                vector<string> {text} :
-                splitWords(text, params.limitLength - (params.padding * 2));
+            vector<string> lines = 
+                (params.explicitTextLength > 0)
+                    ? vector<string> {text} 
+                    : splitWords(text, params.limitLength - (params.padding * 2));
 
             for (int i = 0; i < lines.size(); i++) {
                 string line = lines[i];
 
-                textLength = (params.explicitTextLength > 0) ? 
-                    (params.explicitTextLength) : 
-                    (text.length());
+                textLength = 
+                    (params.explicitTextLength > 0) 
+                        ? (params.explicitTextLength)
+                        : (text.length());
 
                 if (params.limitLength < 0) {
                     params.limitLength = program::config::lengthHUD;
@@ -223,9 +225,23 @@ namespace utils {
             }
             return result;
         }
+
+        string formatAsInput(const string& prompt, const string& value = "", const string& indentString = " >> ") {
+            return (indentString + prompt + value);
+        }
     }
 
     namespace input {
+        /**
+         * Handles the failure state of standard input stream (cin).
+         * 
+         * This function checks if the cin stream is in a failure state and
+         * resets it if necessary. It also clears the input buffer to prevent
+         * any incorrect data from remaining in the stream.
+         * 
+         * @param fail A reference to a boolean variable that is set to true
+         *             if cin is in a failure state, false otherwise.
+         */
         void cinHandleFail(bool& fail) {
             fail = cin.fail();
 
@@ -236,6 +252,14 @@ namespace utils {
             cin.ignore(numeric_limits<streamsize>::max(), '\n');
         }
 
+        /**
+         * Prompts the user for input and reads an integer into the provided variable.
+         * 
+         * @param prompt The message displayed to the user before input.
+         * @param var A reference to an int variable where the input will be stored.
+         * 
+         * @returns A boolean indicating whether the input is invalid.
+         */
         bool getInput(const string prompt, int& var) {
             bool fail;
 
@@ -246,6 +270,14 @@ namespace utils {
             return fail;
         }
 
+        /**
+         * Prompts the user for input and reads a line of text into the provided variable.
+         * 
+         * @param prompt The message displayed to the user before input.
+         * @param var A reference to a string variable where the input will be stored.
+         * 
+         * @returns A boolean indicating whether the input was empty.
+         */
         bool getInput(const string prompt, string& var) {
             cout << " >> " << prompt;
             getline(cin, var);
@@ -256,6 +288,24 @@ namespace utils {
 }
 
 namespace display {
+
+    namespace screen {
+        void clear() {
+            #if defined(__LINUX__) || defined(__APPLE__) || defined(__gnu_linux__) || defined(__linux__)
+                cout << "\x1b[2J\x1b[H";
+            #else
+                cout << string(100, '\n');
+            #endif
+            return;
+        }
+
+        enum Status {
+            SUCCESS = 1,
+            RETURN = -1,
+            FINISH = 0
+        };
+    }
+
     namespace components {
         using namespace utils;
 
@@ -308,11 +358,361 @@ namespace display {
 
             return output;
         }
+
+        struct Options {
+            string value;
+            int maxOption, minOption;
+        };
+
+
+        Options buildOptions(vector<string> options, int offset = 0) {
+            int num;
+            int optionsSize = options.size();
+            
+            Options option;
+            option.maxOption = optionsSize - 1 + offset;
+            option.minOption = offset;
+
+            format::FormatParams formatOptions;
+            formatOptions.padding = 7;
+            
+            for (int i = 0; i < optionsSize; i++) {
+                if (offset == 0) {
+                    if (i == optionsSize - 1) {
+                        num = 0;
+                    } else { 
+                        num = i + 1;
+                    };
+                } else {
+                    num = offset + i;
+                };
+
+                option.value += (format::formatText(" [" + to_string(num) + "] " + options[i], formatOptions) + "\n");
+            }
+            return option;
+        } 
+    }
+
+    namespace templates {
+        using namespace utils;
+
+        struct HandleIntInputParams {
+            string titleText;
+            string bodyText;
+            string inputPrompt = "Enter your choice: ";
+            string errorMessageInvalidType = "Invalid input! Please enter an integer.";
+            string errorMessageOutOfRange = "Invalid input! Please enter a valid option.";
+            string prevInputText;
+            vector<int> abortInvokers = {0};
+            int minValue = 0, maxValue = 0;
+        };
+
+        struct HandleIntInput {
+            int value = 0;
+            bool error = false;
+            string errorMessage;
+            string inputText;
+        } defaultIntInput;
+
+        HandleIntInput handleInput(const HandleIntInputParams params, HandleIntInput result = defaultIntInput) {
+            // clear screen
+            screen::clear();
+
+            format::FormatParams titleFormat;
+            titleFormat.align = format::CENTER;
+            titleFormat.padding = 2;
+
+            cout << components::buildHUD() 
+                << (params.titleText) << endl
+                << (params.bodyText.empty() ? "" : params.bodyText + '\n')
+                << (result.error ? format::formatText("## " + result.errorMessage + " ##", titleFormat) + '\n' : "")
+                << components::buildHeader('-');
+
+            if (!params.prevInputText.empty()) {
+                cout << params.prevInputText;
+            }
+
+            bool invalid = input::getInput(params.inputPrompt, result.value);
+
+            if (invalid) {
+                result.error = true;
+                result.errorMessage = params.errorMessageInvalidType;
+                return handleInput(params, result);
+            } else {
+                for (auto &invokerValue : params.abortInvokers) {
+                    if (result.error = result.value == invokerValue) {
+                        break;
+                    }
+                    if (!result.error) {
+                        if (result.error = result.value < params.minValue || result.value > params.maxValue) {
+                            result.errorMessage = params.errorMessageOutOfRange;
+                            return handleInput(params, result);
+                        }
+                    }
+                }
+            }
+
+            if (!result.error) {
+                result.errorMessage.clear();
+            }
+            result.inputText = 
+                params.prevInputText.empty()
+                    ? format::formatAsInput(params.inputPrompt, to_string(result.value))
+                    : params.prevInputText + "\n" + format::formatAsInput(params.inputPrompt, to_string(result.value));
+
+            return result;
+        }
+
+        struct HandleStringInputParams {
+            string titleText;
+            string bodyText;
+            string inputPrompt = "Enter input: ";
+            string errorMessageEmpty = "Invalid input! Please enter a non-empty string.";
+            string prevInputText;
+            vector<string> abortInvokers;
+        };
+
+        struct HandleStringInput {
+            string value;
+            bool error = false;
+            string errorMessage;
+            string inputText;
+        } defaultStringInput;
+
+        HandleStringInput handleInput(const HandleStringInputParams params, HandleStringInput result = defaultStringInput) {
+            // clear screen
+            screen::clear();
+
+            format::FormatParams titleFormat;
+            titleFormat.align = format::CENTER;
+            titleFormat.padding = 2;
+
+            cout << components::buildHUD() 
+                << (format::formatText(params.titleText, titleFormat)) << endl
+                << (params.bodyText.empty() ? "" : params.bodyText + '\n')
+                << (result.error ? format::formatText("## " + result.errorMessage + " ##", titleFormat) + '\n' : "")
+                << components::buildHeader('-');
+
+            if (!params.prevInputText.empty()) {
+                cout << params.prevInputText;
+            }
+
+            bool empty = input::getInput(params.inputPrompt, result.value);
+
+            for (auto &invokerValue : params.abortInvokers) {
+                if (result.error = result.value == invokerValue) {
+                    break;
+                }
+            }
+
+            if (result.error = ((!result.error) && empty && (!params.errorMessageEmpty.empty()))) {
+                result.errorMessage = params.errorMessageEmpty;
+                return handleInput(params, result);
+            }
+
+            result.inputText = 
+                params.prevInputText.empty()
+                    ? format::formatAsInput(params.inputPrompt, result.value)
+                    : params.prevInputText + "\n" + format::formatAsInput(params.inputPrompt, result.value);
+
+            return result;
+        }
+
+        struct PostScreenParams {
+            string titleText;
+            string bodyText;
+            string errorMessage;
+            string prompt = "Enter input: ";
+            vector<string> abortInvokers = {"0"};
+        };
+
+        int postScreen(const PostScreenParams params) {
+            // clear screen
+            screen::clear();
+            string value;
+
+            format::FormatParams titleFormat;
+            titleFormat.align = format::CENTER;
+            titleFormat.padding = 2;
+
+            cout << components::buildHUD() 
+                << (format::formatText(params.titleText, titleFormat)) << endl
+                << (params.bodyText.empty() ? "" : params.bodyText + '\n')
+                << (params.errorMessage.empty() ? "" : format::formatText("## " + params.errorMessage + " ##", titleFormat) + '\n')
+                << components::buildHeader('-');
+
+            input::getInput(params.prompt, value);
+
+            for (auto &invokerValue : params.abortInvokers) {
+                if (value == invokerValue) {
+                    return screen::Status::RETURN;
+                }
+            }
+
+            return screen::Status::SUCCESS;
+        }
+
+        struct RowColumnParams {
+            string titleText;
+            string bodyText;
+            string inputPromptRow = "Enter Row number: ";
+            string inputPromptColumn = "Enter Column number: ";
+            string errorMessageInvalidType = "Invalid input! Please enter an integer.";
+            string errorMessageRowOutOfRange = "Invalid input! Number of row must be between 1 and " + to_string(seatrs::data::totalRows) + ".";
+            string errorMessageColumnOutOfRange = "Invalid input! Number of column must be between 1 and " + to_string(seatrs::data::totalColumns) + ".";
+            int maxInputValueRow = seatrs::data::totalRows;
+            int maxInputValueColumn = seatrs::data::totalColumns;
+        };
+
+        struct RowColumn {
+            int row;
+            int column;
+            bool error = false;
+        } defaultRowColumn;
+
+
+        RowColumn getRowColumn(const RowColumnParams params, RowColumn result = defaultRowColumn) {
+            templates::HandleIntInputParams sharedParams, paramsRow, paramsColumn;
+            
+            sharedParams.titleText = params.titleText;
+            sharedParams.bodyText = params.bodyText;
+            sharedParams.errorMessageInvalidType = params.errorMessageInvalidType;
+            sharedParams.minValue = 1;
+            
+            paramsRow = paramsColumn = sharedParams;
+
+            paramsRow.errorMessageOutOfRange = params.errorMessageRowOutOfRange;
+            paramsRow.inputPrompt = params.inputPromptRow;
+            paramsRow.maxValue = params.maxInputValueRow;
+
+            paramsColumn.errorMessageOutOfRange = params.errorMessageColumnOutOfRange;
+            paramsColumn.inputPrompt = params.inputPromptColumn;
+            paramsColumn.maxValue = params.maxInputValueColumn;
+
+            templates::HandleIntInput resultRow, resultColumn;
+
+            do {
+                resultRow = templates::handleInput(paramsRow);
+
+                if (result.error = resultRow.error) {
+                    break;
+                }
+                
+                paramsColumn.prevInputText = resultRow.inputText;
+                
+                resultColumn = templates::handleInput(paramsColumn);
+
+                result.error = resultColumn.error;
+
+            } while (result.error);
+
+            if (!result.error) {
+                result.row = resultRow.value;
+                result.column = resultColumn.value;
+            }
+
+            return result;
+        }
+
+        struct NameDescriptionParams {
+            string titleText;
+            string bodyText;
+            string inputPromptName = "Enter Name: ";
+            string inputPromptDescription = "Enter Description: ";
+            string errorMessageEmptyName = "Invalid input! Please enter a non-emtpy string.";
+            string errorMessageEmptyDescription;
+        };
+
+        struct NameDescription {
+            string name;
+            string description;
+            bool error = false;
+        } defaultNameDescription;
+
+        NameDescription getNameDescription(const NameDescriptionParams params, NameDescription result = defaultNameDescription) {
+            templates::HandleStringInputParams sharedParams, paramsName, paramsDescription;
+
+            sharedParams.titleText = params.titleText;
+            sharedParams.bodyText = params.bodyText;
+
+            paramsName = paramsDescription = sharedParams;
+
+            paramsName.inputPrompt = params.inputPromptName;
+            paramsName.errorMessageEmpty = params.errorMessageEmptyName;
+
+            paramsDescription.inputPrompt = params.inputPromptDescription;
+            paramsDescription.errorMessageEmpty = params.errorMessageEmptyDescription;
+
+            templates::HandleStringInput resultName, resultDescription;
+
+            do {
+                resultName = templates::handleInput(paramsName);
+
+                if (result.error = resultName.error) {
+                    break;
+                }
+
+                paramsDescription.prevInputText = resultName.inputText;
+
+                resultDescription = templates::handleInput(paramsDescription);
+
+                result.error = resultDescription.error;
+            } while (result.error);
+
+            if (!result.error) {
+                result.name = resultName.value;
+                result.description = resultDescription.value;
+            }
+
+            return result;
+        }
+    }
+
+    namespace screen {
+        using namespace utils;
+
+        int mainMenu() {
+            int status;
+            templates::HandleIntInputParams choiceParams;
+
+            choiceParams.titleText = 
+                "[Main Menu]\n" 
+                "Choose an option.";
+            
+            components::Options options = components::buildOptions({
+                "Display Seat Layout",
+                "Create Seat Reservation",
+                "Read/Display Seat Reservation",
+                "Update Seat Reservation",
+                "Delete/Cancel Seat Reservation",
+                "Options (-> Exit)"
+            });
+
+            choiceParams.bodyText = options.value;
+            choiceParams.minValue = options.minOption;
+            choiceParams.maxValue = options.maxOption;
+
+            do {
+                templates::HandleIntInput result = templates::handleInput(choiceParams);
+
+                switch (result.value) {
+                    case 2: {
+                        status = 1;
+                        break;
+                    }
+                    case 0: {
+                        status = 0;
+                        break;
+                    }
+                    
+                }
+            } while (status != 0);
+        
+            return 0;
+        }
     }
 }
 
 int main() {
-    string str = "░";
-    cout << str.length() << endl << display::components::buildHUD() << endl;
-    return 0;
+    return display::screen::mainMenu();
 }
