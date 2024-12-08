@@ -979,7 +979,7 @@ namespace display {
             templates::RowColumnParams rcParams;
             rcParams.titleText = 
                 "[View/Read Seat Reservation]\n"
-                "Enter the row and column of the seat reservation to cancel.";
+                "Enter the row and column of the seat reservation to read.";
             rcParams.bodyText = format::formatText(
                 "[0] Return to Main Menu\n", 
                 format::optionsFormat
