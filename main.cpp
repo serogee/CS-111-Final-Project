@@ -1,4 +1,4 @@
-    #include <iostream>
+#include <iostream>
 #include <limits>
 #include <string>
 #include <vector>
@@ -1046,7 +1046,7 @@ namespace display {
             );
             
             do {
-                postParams.titleText = "[Update Seat Reservation]";
+                postParams.titleText = "[Read/View Seat Reservation]";
 
                 rcResult = templates::getRowColumn(rcParams);
 
