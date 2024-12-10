@@ -1,4 +1,4 @@
-#include <iostream>
+    #include <iostream>
 #include <limits>
 #include <string>
 #include <vector>
@@ -20,6 +20,15 @@ namespace seatrs {
         int totalColumns = 10;
     }
 
+    /**
+     * Sets the size of the seat layout to the given number of rows and columns.
+     * If the new size is larger than the old size, the old data is copied into the
+     * new array. If the new size is smaller than the old size, the extra data is
+     * lost.
+     * 
+     * @param rows The number of rows in the new seat layout.
+     * @param columns The number of columns in the new seat layout.
+     */
     void setSize(int rows = 10, int columns = 10) {
 
         // Create a 2d array with the specified size
@@ -31,7 +40,15 @@ namespace seatrs {
         if (data::seats != nullptr) {
 
             // Copy as much of the old array into the new array
-            for (int iRow = 0; (data::totalRows < rows ? iRow < data::totalRows : iRow < rows); iRow++) {
+            for (
+                int iRow = 0; 
+                (
+                    data::totalRows < rows 
+                        ? iRow < data::totalRows 
+                        : iRow < rows
+                ); 
+                iRow++
+            ) {
                 for (int iColumn = 0; (data::totalColumns < columns ? iColumn < data::totalColumns : iColumn < columns); iColumn++) {
                     newSeats[iRow][iColumn] = data::seats[iRow][iColumn]; 
                 }
@@ -50,8 +67,17 @@ namespace seatrs {
         data::totalColumns = columns;
     }
 
+    /**
+     * Checks if a given seat position is valid.
+     * 
+     * @param irow The row of the seat
+     * @param icol The column of the seat
+     * 
+     * @returns true if the seat is valid, false otherwise
+     */
     bool isValidSeat(int irow, int icol) {
-        return irow >= 0 && irow < data::totalRows && icol >= 0 && icol < data::totalColumns;
+        return (irow >= 0) && (irow < data::totalRows) && 
+        (icol >= 0) && (icol < data::totalColumns);
     }
 }
 
@@ -171,14 +197,14 @@ namespace utils {
             string space = " ";
             int explicitTextLength = 0; // to handle text where length != no. characters
                                         //   like \t which is 1 character but 4 spaces,
-                                        //   specifically for the nameArt to work
+                                        //   specifically for the nameArt to work.
         } optionsFormat = {LEFT, -1, 8};
 
         /**
          * Format a given string into a block of text with a specified length, 
          * with optional padding and centering. The text is split into words and 
          * each word is placed on a new line if it exceeds the specified length. 
-         * The words are then centered and padded with a given space character.
+         * The words are then formatted and padded with a given space character.
          * 
          * @param text The text to format.
          * @param params The parameters for formatting the text.
@@ -189,13 +215,14 @@ namespace utils {
             int spaceLeft, spaceRight;
             int lineLength;
             string spaceLeftText, spaceRightText;
-
             string result;
 
             vector<string> lines = 
                 (params.explicitTextLength > 0)
-                    ? vector<string> {text} 
-                    : splitWords(text, params.limitLength - (params.padding * 2));
+                    ? vector<string> {text} // the text length is explicitly defined,
+                                            //   expected to only be in one line.  
+                    : splitWords(text, params.limitLength - (params.padding * 2));  // get the lines after splitting the words 
+                                                                                    //   based on the limit length for each line.
 
             for (int i = 0; i < lines.size(); i++) {
                 string line = lines[i];
@@ -209,6 +236,7 @@ namespace utils {
                     params.limitLength = program::config::lengthHUD;
                 }
                 
+                // Determine how much space each line should have, excluding padding and line length
                 int spaceTotalLength = params.limitLength - lineLength - (params.padding * 2);
 
                 // Determine in what alignment each line should be formatted in
@@ -244,8 +272,8 @@ namespace utils {
 
         /**
          * Format a given vector of strings into a block of text with a specified length, 
-         * with optional padding and centering. The text is split into words and each word is placed on a new line if it exceeds the specified length. 
-         * The words are then centered and padded with a given space character.
+         * with optional padding and centering. The words are then formatted and padded
+         * with a given space character.
          * 
          * @param text The text to format, given as a vector of strings.
          * @param params The parameters for formatting the text.
@@ -260,6 +288,16 @@ namespace utils {
             return result;
         }
 
+        /**
+         * Format a given input prompt and value as a string. Used to
+         * save a user's input for continuous prompts.
+         * 
+         * @param prompt The input prompt to format.
+         * @param value The value entered by the user, if any.
+         * @param indentString The optional indent string to prepend to the formatted string.
+         * 
+         * @returns A string consisting of the formatted input prompt and value.
+         */
         string formatAsInput(const string& prompt, const string& value = "", const string& indentString = " >> ") {
             return (indentString + prompt + value + '\n');
         }
@@ -277,12 +315,16 @@ namespace utils {
          *             if cin is in a failure state, false otherwise.
          */
         void cinHandleFail(bool& fail) {
+            // Learned from: https://stackoverflow.com/a/60890250
+
+            // Check if cin is in a failure state
             fail = cin.fail();
 
             if (fail) {
                 cin.clear();
             }
 
+            // Clearing the input buffer regardless of fail allows to clean excess input
             cin.ignore(numeric_limits<streamsize>::max(), '\n');
         }
 
@@ -310,7 +352,7 @@ namespace utils {
          * @param prompt The message displayed to the user before input.
          * @param var A reference to a string variable where the input will be stored.
          * 
-         * @returns A boolean indicating whether the input was empty.
+         * @returns A boolean indicating whether the input was invalid (empty).
          */
         bool getInput(const string prompt, string& var) {
             cout << " >> " << prompt;
@@ -328,14 +370,15 @@ namespace display {
         /**
          * Clears the console screen and moves the cursor to the top left position.
          * 
-         * This function will work on both Windows and Linux systems, and should be
-         * the preferred way to clear the console screen.
+         * This function will work on both Windows and Unix-like systems.
          */
         void clear() {
             #if defined(__LINUX__) || defined(__APPLE__) || defined(__gnu_linux__) || defined(__linux__)
                 cout << "\x1b[2J\x1b[H";
+                // credit: https://stackoverflow.com/a/6487534
             #else
                 cout << string(100, '\n');
+                // Windows is not a Unix-like system, thus we use a different, less preferable method
             #endif
             return;
         }
@@ -445,7 +488,10 @@ namespace display {
          *
          * @returns A HandleIntInput structure containing the validated input value.
          */
-        HandleIntInput handleInput(const HandleIntInputParams params, HandleIntInput result = defaultIntInput) {
+        HandleIntInput handleInput(
+            const HandleIntInputParams params, 
+            HandleIntInput result = defaultIntInput
+        ) {
             // clear screen
             screen::clear();
 
@@ -572,8 +618,8 @@ namespace display {
          * @param params A structure containing parameters for input handling.
          *
          * @returns An integer indicating the status of the function.
-         *          screen::Status::SUCCESS if the user entered a valid input.
-         *          screen::Status::RETURN if the user chose to abort.
+         *          SUCCESS if the user entered a valid input.
+         *          RETURN if the user chose to abort.
          */
         int postScreen(const PostScreenParams params) {
             // clear screen
@@ -586,7 +632,8 @@ namespace display {
 
             cout << components::buildHUD() 
                 << (format::formatText(params.titleText, titleFormat)) << endl
-                << (params.errorMessage.empty() ? "" : format::formatText("## " + params.errorMessage + " ##", titleFormat) + '\n')
+                << (params.errorMessage.empty() ? "" : format::formatText("## " + 
+                    params.errorMessage + " ##", titleFormat) + '\n')
                 << (params.bodyText.empty() ? "" : params.bodyText + '\n')
                 << components::buildHeader('-');
 
@@ -965,6 +1012,7 @@ namespace display {
                     postParams.titleText = 
                         "[Create Seat Reservation]\n"
                         "Reservation created successfully.";
+                    postParams.errorMessage.clear();
                     status = templates::postScreen(postParams);
                 }
 
@@ -1020,6 +1068,7 @@ namespace display {
                         status = templates::postScreen(postParams);
                         continue;
                     }
+
                     seatrs::Seat &seat = seatrs::data::seats[irow][icolumn];
 
                     postParams.bodyText = format::formatText(
@@ -1034,6 +1083,7 @@ namespace display {
                     postParams.titleText = 
                         "[View/Read Seat Reservation]\n"
                         "Seat Reservation Details:";
+                    postParams.errorMessage.clear();
                     status = templates::postScreen(postParams);
                 }
                 
@@ -1110,6 +1160,7 @@ namespace display {
                     postParams.titleText = 
                         "[Update Seat Reservation]\n"
                         "Reservation updated successfully.";
+                    postParams.errorMessage.clear();
                     status = templates::postScreen(postParams);
                 }
 
@@ -1167,6 +1218,7 @@ namespace display {
                     postParams.titleText = 
                         "[Delete Seat Reservation]\n"
                         "Reservation deleted successfully.";
+                    postParams.errorMessage.clear();
                     status = templates::postScreen(postParams);
                 }
 
